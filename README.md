@@ -2,8 +2,9 @@
 This is our implementation of the architecture presented in the paper "Intrinsic Point Cloud Interpolation via Dual Latent Space Navigation". The network is designed to preserve intrinsic shape properties during shape manipulations.
 
 
-![PointCleanNet cleans point clouds](img/teaser_intrinsic.png "Intrinsic interpolation")
-
+<p align="center">
+<img src="img/teaser_intrinsic.png" width="500">
+</p>
 
 
 This code was written by [Marie-Julie Rakotosaona](http://www.lix.polytechnique.fr/Labo/Marie-Julie.RAKOTOSAONA/), based on the excellent implementation of Pointnet Autoencoder by [Charles R. Qi](https://web.stanford.edu/~rqi/).
