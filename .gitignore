@@ -1,0 +1,10 @@
+/data/
+/models/*.pth
+/models/*.txt
+/__pycache__/
+/log_mapping/
+/log_edge_ae/
+/log_shape_vae/
+/results/
+/log_mapping2_losses/
+*.pyc
