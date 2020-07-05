@@ -1,4 +1,4 @@
-# Intrinsic Point Cloud Interpolation via Dual Latent Space Navigation
+# [Intrinsic Point Cloud Interpolation via Dual Latent Space Navigation](https://arxiv.org/abs/2004.01661)
 This is our implementation of the architecture presented in the ECCV oral paper "Intrinsic Point Cloud Interpolation via Dual Latent Space Navigation". The network is designed to preserve intrinsic shape properties during shape manipulations.
 
 
