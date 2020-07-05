@@ -20,7 +20,7 @@ import test_utils
 parser = argparse.ArgumentParser()
 parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
 parser.add_argument('--num_point', type=int, default=1000, help='Point Number [default: 2048]')
-parser.add_argument('--model_path', type=str, default="log_mapping/best_model_epoch_656.ckpt", help='path to the model to evaluate')
+parser.add_argument('--model_path', type=str, default="log_mapping2_losses/best_model_epoch_003.ckpt", help='path to the model to evaluate')
 
 FLAGS = parser.parse_args()
 
@@ -30,10 +30,10 @@ GPU_INDEX = FLAGS.gpu
 DATA_PATH = "data/sliced"
 EDGES_PATH = "data/template.ply"
 
-TEST_DATASET = part_dataset.Dataset(root=DATA_PATH, npoints=NUM_POINT, split='test_all')
+TEST_DATASET = part_dataset.Dataset(root=DATA_PATH, npoints=NUM_POINT, split='test_all', edges=EDGES_PATH)
 
 MODEL = importlib.import_module("model_edge_ae") # import network module
-MODEL2 = importlib.import_module("model_shape_vae") # import network module
+MODEL2 = importlib.import_module("model_shape_ae") # import network module
 
 MODEL_PATH = FLAGS.model_path
 
@@ -70,7 +70,7 @@ def get_model(batch_size, num_point):
                 latent_repr_edge = MODEL.get_fc_encoder(tf.expand_dims(label_edge_lengths, -1),  is_training_false, None, label_edge_lengths.shape[1],batch_size, end_points)
                 edge_pred = MODEL.get_decoder(latent_repr_edge, is_training_false, None, label_edge_lengths.shape[1], batch_size)
             with tf.variable_scope("reconstruction_pc"):
-                latent_repr_pc = MODEL2.get_encoder_vae(tf.expand_dims(labels_pl, -1), 3, is_training_false, None, num_point,batch_size, end_points)
+                latent_repr_pc = MODEL2.get_encoder(tf.expand_dims(labels_pl, -1), 3, is_training_false, None, num_point,batch_size, end_points)
             with tf.variable_scope("to_edge"):
                 from_pc_latent = to_edge_translator(latent_repr_pc)
             with tf.variable_scope("to_pc"):
@@ -191,23 +191,20 @@ def eval_interpolations_variance(n_interp=10):
 
         edge_path_tmp = test_utils.build_edge_path0(sess, ops,couple, decoded_path_edge,TEST_DATASET)
         dist_edge_path = test_utils.eval_edge_length_variance_interpolation(edge_path_tmp)
-        #print("shape_vae: {} ours: {} edge_ae: {}".format(dist_pc_path, dist_pc_proj_path, dist_edge_path))
+        #print("shape_ae: {} ours: {} edge_ae: {}".format(dist_pc_path, dist_pc_proj_path, dist_edge_path))
 
         dist_pc_loss.append(dist_pc_path)
         dist_pc_proj_loss.append(dist_pc_proj_path)
         dist_edge_loss.append(dist_edge_path)
 
-    print("=========================\nVariance edge length:\nshape_vae: {}\nours:      {}\nedge ae:   {}".format(np.mean(dist_pc_loss), np.mean(dist_pc_proj_loss), np.mean(dist_edge_loss)))
-    print("=========================\nVariance area:\nshape_vae: {}\nours:      {}".format(np.mean(dist_area_loss), np.mean(dist_area_proj_loss)))
+    print("=========================\nVariance edge length:\nshape_ae: {}\nours:      {}\nedge ae:   {}".format(np.mean(dist_pc_loss), np.mean(dist_pc_proj_loss), np.mean(dist_edge_loss)))
+    print("=========================\nVariance area:\nshape_ae: {}\nours:      {}".format(np.mean(dist_area_loss), np.mean(dist_area_proj_loss)))
 
 def align_pc(sess, ops, pc, base):
     feed_dict = {ops['labels_pl']: base, ops['pointclouds_pl'] : pc}
     return sess.run(ops['aligned_pc'], feed_dict=feed_dict)
 
 def interpolate_and_save(A, B, n_interp = 10):
-    for i in range(600,650):
-        mesh = trimesh.Trimesh(vertices=TEST_DATASET[i][1],faces=FACES,process=False)
-        mesh.export("results/test{}.ply".format( i))
     sess, ops = get_model(batch_size=1, num_point=NUM_POINT)
     z_s_pc = test_utils.get_latent_pc(sess, ops,[TEST_DATASET[A][1]])
     z_s_pc_proj = test_utils.get_latent_pc_proj(sess, ops,[TEST_DATASET[A][1]])
@@ -229,7 +226,7 @@ def interpolate_and_save(A, B, n_interp = 10):
     for i in range(n_interp):
         aligned = align_pc(sess, ops,[decoded_path_pc[i]],[TEST_DATASET[A][1]])[0]
         mesh = trimesh.Trimesh(vertices=aligned,faces=FACES,process=False)
-        mesh.export("results/shape_vae_interp_A{}_B{}_n{}.ply".format(A, B, i))
+        mesh.export("results/shape_ae_interp_A{}_B{}_n{}.ply".format(A, B, i))
         aligned = align_pc(sess, ops, [decoded_path_pc_proj[i]],[TEST_DATASET[A][1]])[0]
         mesh = trimesh.Trimesh(vertices=aligned,faces=FACES,process=False)
         mesh.export("results/ours_interp_A{}_B{}_n{}.ply".format(A, B, i))
@@ -281,19 +278,19 @@ def eval_reconstruction():
     print("edge reconstruction:")
     print("edge_ae:    {}".format(diff_edge_ae/len(shapes)))
     print("ours:       {}".format(diff_proj/len(shapes)))
-    print("shape_vae:  {}".format(diff_normal/len(shapes)))
+    print("shape_ae:   {}".format(diff_normal/len(shapes)))
     print("====================")
     print('pc reconstruction:')
     print("ours:       {}".format(pc_loss/len(shapes)))
-    print("shape_vae:  {}".format(nromal_pcloss/len(shapes)))
+    print("shape_ae:   {}".format(nromal_pcloss/len(shapes)))
     print("====================")
     print("area recontruction:")
-    print("shape_vae:  {}".format(np.mean(np.array(area_ae))))
+    print("shape_ae:   {}".format(np.mean(np.array(area_ae))))
     print("ours:       {}".format(np.mean(np.array(area_proj))))
 
 
 
 if __name__=='__main__':
-    #   eval_reconstruction()
+    #eval_reconstruction()
     interpolate_and_save(0, 617)
     #eval_interpolations_variance()

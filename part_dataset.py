@@ -7,6 +7,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
 sys.path.append(os.path.join(ROOT_DIR, 'utils'))
 import MeshProcess
+import trimesh
 
 
 def pc_normalize(pc):
@@ -37,7 +38,7 @@ def rotate_point_cloud(batch_data_shuffled, batch_data ):
     """
     rotated_data = np.zeros(batch_data.shape, dtype=np.float32)
     rotated_data_shuffled = np.zeros(batch_data.shape, dtype=np.float32)
-    for k in xrange(batch_data.shape[0]):
+    for k in range(batch_data.shape[0]):
         rotation_angle = np.random.uniform() * 2 * np.pi
         cosval = np.cos(rotation_angle)
         sinval = np.sin(rotation_angle)
@@ -52,7 +53,7 @@ def rotate_point_cloud(batch_data_shuffled, batch_data ):
 
 
 class Dataset():
-    def __init__(self, root, npoints = 2500,   split='train', normalize=True,  normalize_area=False):
+    def __init__(self, root,  npoints = 2500, split='train', normalize=False,  normalize_area=True,edges=None):
         self.normalize = normalize
         self.normalize_area = normalize_area
         if split == "train":
@@ -68,7 +69,8 @@ class Dataset():
         if self.normalize:
             self.files = np.array([pc_normalize(x) for x in self.files])
         if self.normalize_area:
-            self.files = np.array([pc_normalize_area(x) for x in self.files])
+            self.triv = trimesh.load(edges, process=False).faces
+            self.files = np.array([pc_normalize_area(x, self.triv) for x in self.files])
 
     def __getitem__(self, index):
         point_set = self.files[index]

@@ -1,11 +1,14 @@
+from itertools import permutations
 import tensorflow as tf
+import numpy as np
+import math
 import sys
 import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
 sys.path.append(os.path.join(ROOT_DIR, 'utils'))
 import tf_util
-
+from scipy.io import loadmat
 
 def placeholder_inputs(batch_size, num_point):
     pointclouds_pl = tf.placeholder(tf.float32, shape=(batch_size, num_point, 3))
@@ -20,6 +23,16 @@ def get_decoder(net, is_training, bn_decay, num_point, batch_size):
     net = tf.identity(net, name = "pred")
     return net
 
+def compute_edge_lengths(pred):
+    mesh_edges, _ = init_edges()
+    edges1 = tf.constant(mesh_edges[:,0], dtype = tf.int32)
+    edges2 = tf.constant(mesh_edges[:,1], dtype = tf.int32)
+    #p1 =  tf.map_fn(lambda x : tf.gather(x,edges1), pred)
+    #p2 = tf.map_fn(lambda x : tf.gather(x,edges2), pred)
+    p1 = tf.gather(pred, edges1,axis = 1)
+    p2 = tf.gather(pred, edges2,axis = 1)
+    edge_length = tf.math.sqrt(tf.maximum(tf.reduce_sum(tf.math.square(p1-p2), 2), 1e-12)) # TODO change here
+    return edge_length
 
 def ICP(X, Y, n_pc_points):
     mu_x = tf.reduce_mean(X, axis = 1)
@@ -48,7 +61,7 @@ def ICP(X, Y, n_pc_points):
     opt_labels =  tf.einsum("abki,abi->abk", concat_R_opt, X) + concat_t_opt
     return opt_labels
 
-def get_encoder_vae(input_image, point_dim, is_training, bn_decay, num_point,batch_size, end_points):
+def get_encoder(input_image, point_dim, is_training, bn_decay, num_point,batch_size, end_points):
     net = tf_util.conv2d(input_image, 64, [1,point_dim],
                          padding='VALID', stride=[1,1],
                          bn=True, is_training=is_training,
@@ -73,20 +86,12 @@ def get_encoder_vae(input_image, point_dim, is_training, bn_decay, num_point,bat
                                      padding='VALID', scope='maxpool')
 
     net = tf.reshape(global_feat, [batch_size, -1])
+    net = tf.identity(net, name = "old_input_latent")
     z = tf_util.fully_connected(net, 256, bn=True, is_training=is_training, scope='z', bn_decay=bn_decay)# 256
-    z= tf.identity(z, name = "old_input_latent")
-
-    z_mean = tf_util.fully_connected(net, 256, bn=True, is_training=is_training, scope='mean', bn_decay=bn_decay)# 256
-    z_std = tf_util.fully_connected(net, 256, bn=True, is_training=is_training, scope='std', bn_decay=bn_decay)# 256
-    eps = tf.random_normal(shape=tf.shape(z_std), mean=0, stddev=1, dtype=tf.float32)
-    z = z_mean + z_std * eps
-    z = tf.identity(z, name = "input_latent")
-    kl_divergence =  0.5 * tf.reduce_mean(tf.reduce_sum(tf.square(z_mean) + tf.square(z_std) - tf.log(1e-10 +tf.square(z_std)) - 1, 1))
-    end_points['kl_div'] = kl_divergence
     return z
 
 
-def get_model_vae(point_cloud, is_training, bn_decay=None):
+def get_model(point_cloud, is_training, bn_decay=None):
     """ Autoencoder for point clouds.
     Input:
         point_cloud: TF tensor BxNx3
@@ -104,7 +109,7 @@ def get_model_vae(point_cloud, is_training, bn_decay=None):
     input_image = tf.expand_dims(point_cloud, -1)
 
     # Encoder
-    net = get_encoder_vae(input_image, point_dim, is_training, bn_decay, num_point,batch_size, end_points)
+    net = get_encoder(input_image, point_dim, is_training, bn_decay, num_point,batch_size, end_points)
     end_points['embedding'] = net
 
     # FC Decoder
@@ -113,6 +118,16 @@ def get_model_vae(point_cloud, is_training, bn_decay=None):
     return net, end_points
 
 
+def init_edges():
+    conn_path = os.path.join(ROOT_DIR,"TRIV2.mat")
+    conn = loadmat(conn_path)['TRIV']
+    conn = conn-1
+    all_edges = np.concatenate([conn[:, :2], conn[:,1:], np.concatenate([conn[:,0:1], conn[:,2:3]], 1)])
+    min_edge, max_edge = np.min(all_edges, 1), np.max(all_edges, 1)
+    edges = ["_".join(x) for x in zip(map(str,min_edge), map(str,max_edge))]
+    unique_edges = list(set(edges))
+    mesh_edges = np.array([x.split("_") for x in unique_edges]).astype(int)
+    return mesh_edges, conn
 
 def get_loss(pred, label, end_points):
     """ pred: BxNx3,
@@ -123,3 +138,11 @@ def get_loss_ICP(pred, label, end_points):
     """ pred: BxNx3,
         label: BxNx3, """
     end_points['recons_loss'] = tf.reduce_mean(tf.square(ICP(label, pred, pred.shape[1]) - pred))
+
+
+if __name__=='__main__':
+    with tf.Graph().as_default():
+        inputs = tf.zeros((32,1024,3))
+        outputs = get_model(inputs, tf.constant(True))
+        print(outputs)
+        loss = get_loss(outputs[0], tf.zeros((32,1024,3)), outputs[1])

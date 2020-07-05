@@ -17,18 +17,18 @@ import part_dataset
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--gpu', type=int, default=2, help='GPU to use [default: GPU 0]')
-parser.add_argument('--model', default='model_shape_vae', help='Model name [default: model]')
-parser.add_argument('--log_dir', default='log_shape_vae', help='Log dir [default: log]')
+parser.add_argument('--model', default='model_shape_ae', help='Model name [default: model]')
+parser.add_argument('--log_dir', default='log_shape_ae', help='Log dir [default: log]')
 parser.add_argument('--num_point', type=int, default=1000, help='Point Number [default: 2048]')
 parser.add_argument('--max_epoch', type=int, default=4001, help='Epoch to run [default: 201]')
 parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default: 32]')
-parser.add_argument('--learning_rate', type=float, default=0.0001, help='Initial learning rate [default: 0.001]')
+parser.add_argument('--learning_rate', type=float, default=0.001, help='Initial learning rate [default: 0.001]')
 parser.add_argument('--momentum', type=float, default=0.9, help='Initial learning rate [default: 0.9]')
 parser.add_argument('--optimizer', default='adam', help='adam or momentum [default: adam]')
 parser.add_argument('--decay_step', type=int, default= 466*32*200, help='Decay step for lr decay [default: 200000]')
 parser.add_argument('--decay_rate', type=float, default=0.7, help='Decay rate for lr decay [default: 0.7]')
 parser.add_argument('--no_rotation',default=False,  help='Disable random rotation during training.')
-parser.add_argument('--ICP',default=True, action='store_true', help='Use ICP loss during training.')
+parser.add_argument('--ICP',default=False, help='Use ICP loss during training.')
 FLAGS = parser.parse_args()
 EPOCH_CNT = 0
 
@@ -59,11 +59,11 @@ BN_DECAY_CLIP = 0.99
 
 HOSTNAME = socket.gethostname()
 
-DATA_PATH = "dataset/sliced"
+DATA_PATH = "data/sliced"
 EDGES_PATH = "data/template.ply"
 
-TRAIN_DATASET = part_dataset.Dataset(root=DATA_PATH, npoints=NUM_POINT,  split='train')
-TEST_DATASET = part_dataset.Dataset(root=DATA_PATH, npoints=NUM_POINT, split='val')
+TRAIN_DATASET = part_dataset.Dataset(root=DATA_PATH, npoints=NUM_POINT,  split='train',edges=EDGES_PATH)
+TEST_DATASET = part_dataset.Dataset(root=DATA_PATH, npoints=NUM_POINT, split='val',edges=EDGES_PATH)
 
 def log_string(out_str):
     LOG_FOUT.write(out_str+'\n')
@@ -107,21 +107,16 @@ def train():
             print("--- Get model and loss")
             # Get model and loss
             with tf.variable_scope("reconstruction_pc"):
-                pred, end_points = MODEL.get_model_vae(pointclouds_pl, is_training_pl, bn_decay=bn_decay)
+                pred, end_points = MODEL.get_model(pointclouds_pl, is_training_pl, bn_decay=bn_decay)
                 if ICP:
                     MODEL.get_loss_ICP(pred, labels_pl, end_points)
                 else:
                     MODEL.get_loss(pred, labels_pl, end_points)
 
-            recons_loss_alpha =100
-            kl_div_alpha =  0.000001
-            tf.summary.scalar('recons_loss', end_points['recons_loss'])#*init_loss_alpha)
-            tf.summary.scalar('kl_divergence', end_points['kl_div'])
-            tf.summary.scalar('kl_divergence_alpha', end_points['kl_div']*kl_div_alpha)
-            tf.summary.scalar('recons_loss_alpha', end_points['recons_loss']*recons_loss_alpha)
+            tf.summary.scalar('recons_loss', end_points['recons_loss'])
 
 
-            print "--- Get training operator"
+            print("--- Get training operator")
             # Get training operator
             learning_rate = get_learning_rate(batch)
             tf.summary.scalar('learning_rate', learning_rate)
@@ -130,7 +125,7 @@ def train():
             elif OPTIMIZER == 'adam':
                 optimizer = tf.train.AdamOptimizer(learning_rate)
 
-            total_loss =  end_points['recons_loss']*recons_loss_alpha + end_points['kl_div']*kl_div_alpha
+            total_loss =  end_points['recons_loss']
 
             tf.summary.scalar("total_loss",total_loss)
             train_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "reconstruction_pc")
@@ -205,7 +200,7 @@ def train_one_epoch(sess, ops, train_writer, train_op):
     # Shuffle train samples
     train_idxs = np.arange(0, len(TRAIN_DATASET))
     np.random.shuffle(train_idxs)
-    num_batches = len(TRAIN_DATASET)/BATCH_SIZE
+    num_batches = len(TRAIN_DATASET)//BATCH_SIZE
 
     log_string(str(datetime.now()))
 
@@ -240,7 +235,7 @@ def eval_one_epoch(sess, ops, test_writer):
     global EPOCH_CNT
     is_training = False
     test_idxs = np.arange(0, len(TEST_DATASET))
-    num_batches = len(TEST_DATASET)/BATCH_SIZE
+    num_batches = len(TEST_DATASET)//BATCH_SIZE
 
     log_string(str(datetime.now()))
     log_string('---- EPOCH %03d EVALUATION ----'%(EPOCH_CNT))

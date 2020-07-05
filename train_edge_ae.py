@@ -20,7 +20,7 @@ parser.add_argument('--gpu', type=int, default=2, help='GPU to use [default: GPU
 parser.add_argument('--model', default='model_edge_ae', help='Model name [default: model]')
 parser.add_argument('--log_dir', default='log_edge_ae', help='Log dir [default: log]')
 parser.add_argument('--num_point', type=int, default=1000, help='Point Number [default: 2048]')
-parser.add_argument('--max_epoch', type=int, default=3501, help='Epoch to run [default: 201]')
+parser.add_argument('--max_epoch', type=int, default=3500, help='Epoch to run [default: 201]')
 parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default: 32]')
 parser.add_argument('--learning_rate', type=float, default=0.000001, help='Initial learning rate [default: 0.001]')#added one 0
 parser.add_argument('--momentum', type=float, default=0.9, help='Initial learning rate [default: 0.9]')
@@ -59,8 +59,8 @@ HOSTNAME = socket.gethostname()
 DATA_PATH = "data/sliced"
 EDGES_PATH = "data/template.ply"
 
-TRAIN_DATASET = part_dataset.Dataset(root=DATA_PATH, npoints=NUM_POINT,  split='train')
-TEST_DATASET = part_dataset.Dataset(root=DATA_PATH, npoints=NUM_POINT,  split='val')
+TRAIN_DATASET = part_dataset.Dataset(root=DATA_PATH, npoints=NUM_POINT,  split='train', edges=EDGES_PATH)
+TEST_DATASET = part_dataset.Dataset(root=DATA_PATH, npoints=NUM_POINT,  split='val',edges=EDGES_PATH)
 
 def log_string(out_str):
     LOG_FOUT.write(out_str+'\n')
@@ -110,27 +110,24 @@ def train():
                 label_edge_lengths = MODEL.compute_edge_lengths(labels_pl, faces=faces)
                 pred_points, end_points = MODEL.get_model(label_edge_lengths, is_training_pl, bn_decay=bn_decay)
             num_edges =label_edge_lengths.shape[1]
-            diff_edge =  tf.reduce_mean(tf.square(label_edge_lengths - pred_points))
+            recons_edge =  tf.reduce_mean(tf.square(label_edge_lengths - pred_points))
 
             pairs = MODEL.get_pairs(BATCH_SIZE)
             pairs = tf.random.shuffle(pairs)[:32]
-            pc_pairs = tf.gather(label_edge_lengths, pairs)
-            pc_pairs_edges0 = pc_pairs[:,0]
-            pc_pairs_edges1 = pc_pairs[:,1]
+            latent_pairs = tf.gather(end_points['embedding'], pairs)
+            recons_pairs = tf.gather(pred_points, pairs)
+            interpolated_l = (latent_pairs[:,0] + latent_pairs[:,1]) / 2.0
+            interpolated_recons = (recons_pairs[:,0] + recons_pairs[:,1]) / 2.0
 
-            interpolated_pc = (pc_pairs_edges0 + pc_pairs_edges1) / 2.0
             with tf.variable_scope("edge_ae"):
-                latent_pred = MODEL.get_fc_encoder(tf.expand_dims(interpolated_pc, -1),  is_training_pl, bn_decay, num_edges,32, end_points)
-                interpolated_pred = MODEL.get_decoder(latent_pred, is_training_pl, bn_decay, num_edges, BATCH_SIZE)
-            edge_inter_loss = tf.reduce_mean(tf.square(interpolated_pc - interpolated_pred))
+                interpolated_pred = MODEL.get_decoder(interpolated_l, is_training_pl, bn_decay, 2994, BATCH_SIZE)
+            edge_lin_loss = tf.reduce_mean(tf.square(interpolated_recons - interpolated_pred))
 
             edge_recons_loss_alpha =100.0
-            edge_inter_loss_alpha = 100.0
+            edge_lin_loss_alpha = 100.0
 
-            tf.summary.scalar('edge_recons_loss', diff_edge)
-            tf.summary.scalar('edge_inter_loss', edge_inter_loss)
-            tf.summary.scalar('edge_recons_loss_alpha', diff_edge*edge_recons_loss_alpha)
-            tf.summary.scalar('edge_inter_loss_alpha', edge_inter_loss_alpha*edge_inter_loss)
+            tf.summary.scalar('edge_recons_loss', recons_edge*edge_recons_loss_alpha)
+            tf.summary.scalar('edge_lin_loss', edge_lin_loss*edge_lin_loss_alpha)
 
             # Get training operator
             learning_rate = get_learning_rate(batch)
@@ -140,7 +137,7 @@ def train():
             elif OPTIMIZER == 'adam':
                 optimizer = tf.train.AdamOptimizer(learning_rate)
 
-            total_loss = diff_edge*edge_recons_loss_alpha + edge_inter_loss_alpha*edge_inter_loss
+            total_loss = recons_edge*edge_recons_loss_alpha + edge_lin_loss*edge_lin_loss_alpha
 
             tf.summary.scalar("total_loss",total_loss)
             update_ops = tf.compat.v1.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -160,8 +157,8 @@ def train():
 
         # Add summary writers
         merged = tf.summary.merge_all()
-        train_writer = tf.summary.FileWriter(os.path.join(LOG_DIR, 'train_new1'), sess.graph)
-        test_writer = tf.summary.FileWriter(os.path.join(LOG_DIR, 'test_new1'), sess.graph)
+        train_writer = tf.summary.FileWriter(os.path.join(LOG_DIR, 'train'), sess.graph)
+        test_writer = tf.summary.FileWriter(os.path.join(LOG_DIR, 'test'), sess.graph)
 
         # Init variables
         init = tf.global_variables_initializer()
@@ -213,7 +210,7 @@ def train_one_epoch(sess, ops, train_writer, train_op):
     # Shuffle train samples
     train_idxs = np.arange(0, len(TRAIN_DATASET))
     np.random.shuffle(train_idxs)
-    num_batches = len(TRAIN_DATASET)/BATCH_SIZE
+    num_batches = len(TRAIN_DATASET)//BATCH_SIZE
     log_string(str(datetime.now()))
 
     loss_sum = 0
@@ -249,7 +246,7 @@ def eval_one_epoch(sess, ops, test_writer):
     global EPOCH_CNT
     is_training = False
     test_idxs = np.arange(0, len(TEST_DATASET))
-    num_batches = len(TEST_DATASET)/BATCH_SIZE
+    num_batches = len(TEST_DATASET)//BATCH_SIZE
 
     log_string(str(datetime.now()))
     log_string('---- EPOCH %03d EVALUATION ----'%(EPOCH_CNT))

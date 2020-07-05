@@ -19,11 +19,11 @@ import part_dataset
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
-parser.add_argument('--log_dir', default='log_mapping2_losses', help='Log dir [default: log]')
+parser.add_argument('--log_dir', default='log_mapping_3losses', help='Log dir [default: log]')
 parser.add_argument('--num_point', type=int, default=1000, help='Point Number [default: 1000]')
 parser.add_argument('--max_epoch', type=int, default=2501, help='Epoch to run [default: 201]')
-parser.add_argument('--best_edge_ae_epoch', type=int, default=3458, help='Epoch to run [default: 201]')
-parser.add_argument('--best_shape_vae_epoch', type=int, default=2291, help='Epoch to run [default: 201]')
+parser.add_argument('--best_edge_ae_epoch', type=int, default=49, help='Epoch to run [default: 201]')
+parser.add_argument('--best_shape_ae_epoch', type=int, default=23, help='Epoch to run [default: 201]')
 parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default: 32]')
 parser.add_argument('--learning_rate', type=float, default=0.0001, help='Initial learning rate [default: 0.001]')
 parser.add_argument('--momentum', type=float, default=0.9, help='Initial learning rate [default: 0.9]')
@@ -47,7 +47,7 @@ DECAY_RATE = FLAGS.decay_rate
 
 
 MODEL = importlib.import_module("model_edge_ae") # import network module
-MODEL2 = importlib.import_module("model_shape_vae") # import network module
+MODEL2 = importlib.import_module("model_shape_ae") # import network module
 
 MODEL_FILE = os.path.join(BASE_DIR, 'model_edge_ae.py')
 LOG_DIR = FLAGS.log_dir
@@ -66,11 +66,11 @@ HOSTNAME = socket.gethostname()
 DATA_PATH = "data/sliced"
 EDGES_PATH = "data/template.ply"
 
-TRAIN_DATASET = part_dataset.Dataset(root=DATA_PATH, npoints=NUM_POINT,  split='train')
-TEST_DATASET = part_dataset.Dataset(root=DATA_PATH, npoints=NUM_POINT, split='val')
+TRAIN_DATASET = part_dataset.Dataset(root=DATA_PATH, npoints=NUM_POINT,  split='train',edges= EDGES_PATH)
+TEST_DATASET = part_dataset.Dataset(root=DATA_PATH, npoints=NUM_POINT, split='val',edges=EDGES_PATH)
 
-MODEL_PATH = "log_edge_ae/best_model_epoch_{}.ckpt".format(FLAGS.best_edge_ae_epoch)
-MODEL_PATH2 = "log_shape_vae/best_model_epoch_{}.ckpt".format(FLAGS.best_shape_vae_epoch)
+MODEL_PATH = "log_edge_ae/best_model_epoch_{:03d}.ckpt".format(FLAGS.best_edge_ae_epoch)
+MODEL_PATH2 = "log_shape_ae/best_model_epoch_{:03d}.ckpt".format(FLAGS.best_shape_ae_epoch)
 
 def log_string(out_str):
     LOG_FOUT.write(out_str+'\n')
@@ -131,7 +131,7 @@ def train():
             faces = plydata['face']
             faces = np.array([faces[i][0] for i in range(faces.count)])
 
-            # cycle through shape_vae from edge_ae
+            # cycle through shape_ae from edge_ae
             with tf.variable_scope("edge_ae"):
                 label_edge_lengths = MODEL.compute_edge_lengths(labels_pl, faces)
                 end_points = {}
@@ -144,9 +144,9 @@ def train():
                 edge_pred = MODEL.get_decoder(from_pc_latent0, is_training_false, None, label_edge_lengths.shape[1], BATCH_SIZE)
 
 
-            # cycle through edge_ae from shape_vae
+            # cycle through edge_ae from shape_ae
             with tf.variable_scope("reconstruction_pc"):
-                latent_repr_pc = MODEL2.get_encoder_vae(tf.expand_dims(labels_pl, -1), 3, is_training_false, None, NUM_POINT,32, end_points)
+                latent_repr_pc = MODEL2.get_encoder(tf.expand_dims(labels_pl, -1), 3, is_training_false, None, NUM_POINT,32, end_points)
             with tf.variable_scope("to_edge"):
                 from_pc_latent1 = to_edge_translator(latent_repr_pc)
             with tf.variable_scope("to_pc"):
@@ -171,7 +171,7 @@ def train():
             tf.summary.scalar('recons_edge_from_pc_alpha', diff_edge_from_pc*diff_edge_from_pc_alpha)
 
 
-            print "--- Get training operator"
+            print("--- Get training operator")
             # Get training operator
             learning_rate = get_learning_rate(batch)
             tf.summary.scalar('learning_rate', learning_rate)
@@ -266,7 +266,7 @@ def train_one_epoch(sess, ops, train_writer, train_op):
     # Shuffle train samples
     train_idxs = np.arange(0, len(TRAIN_DATASET))
     np.random.shuffle(train_idxs)
-    num_batches = len(TRAIN_DATASET)/BATCH_SIZE
+    num_batches = len(TRAIN_DATASET)//BATCH_SIZE
     log_string(str(datetime.now()))
 
     loss_sum = 0
@@ -302,7 +302,7 @@ def eval_one_epoch(sess, ops, test_writer):
     global EPOCH_CNT
     is_training = False
     test_idxs = np.arange(0, len(TEST_DATASET))
-    num_batches = len(TEST_DATASET)/BATCH_SIZE
+    num_batches = len(TEST_DATASET)//BATCH_SIZE
 
     log_string(str(datetime.now()))
     log_string('---- EPOCH %03d EVALUATION ----'%(EPOCH_CNT))
