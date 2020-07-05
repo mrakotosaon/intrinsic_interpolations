@@ -20,7 +20,7 @@ import test_utils
 parser = argparse.ArgumentParser()
 parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU 0]')
 parser.add_argument('--num_point', type=int, default=1000, help='Point Number [default: 2048]')
-parser.add_argument('--model_path', type=str, default="log_mapping2_losses/best_model_epoch_003.ckpt", help='path to the model to evaluate')
+parser.add_argument('--model_path', type=str, default="intrinsic_interpolation_pretrained_DFAUST/best_model.ckpt", help='path to the model to evaluate')
 
 FLAGS = parser.parse_args()
 
