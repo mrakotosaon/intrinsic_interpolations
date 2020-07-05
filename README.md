@@ -60,6 +60,11 @@ Where n1 and n2 represent the best epoch of each previously trained network.
 
 ## Testing
 
+To dowmload our pretrained model on the humans dataset: 
+``` bash
+python models/download_pretrained_model.py
+```
+
 To test a pretrained model:
 ``` bash
 python test.py --model_path path_to_pretrained_model
