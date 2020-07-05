@@ -3,7 +3,7 @@ This is our implementation of the architecture presented in the ECCV oral paper 
 
 
 <p align="center">
-<img src="img/teaser_intrinsic.png" width="500">
+<img src="img/teaser_intrinsic.png" width="1000">
 </p>
 
 
