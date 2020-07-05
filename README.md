@@ -48,15 +48,23 @@ To train the network with the default settings:
 ### 1. Train edge autoencoder and shape vae:
 ``` bash
 python train_edge_ae.py
-python train_shape_vae.py
+python train_shape_ae.py
 ```
 ### 2. Train mapping networks:
 
 ``` bash
-python train_mapping.py --best_edge_ae_epoch n1 --best_shape_vae_epoch n2
+python train_mapping.py --best_edge_ae_epoch n1 --best_shape_ae_epoch n2
 ```
 
 Where n1 and n2 represent the best epoch of each previously trained network.
+
+## Testing
+
+To test a pretrained model:
+``` bash
+python test.py --model_path path_to_pretrained_model
+```
+Please uncomment the desired function at the end of the file.
 
 ## Citation
 If you use our work, please cite our paper.
