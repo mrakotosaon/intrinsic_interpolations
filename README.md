@@ -37,7 +37,7 @@ python download_data.py
 
  ## Data
 
-Our surreal+dfaust dataset can be found here: https://nuage.lix.polytechnique.fr/index.php/s/gJDLtEwcgLwRwTc
+Our surreal+dfaust dataset can be found here: https://nuage.lix.polytechnique.fr/index.php/s/oGb7FnSqC4DYEwT/download
 It contains the following files:
 - A shape template .ply file that is used only for the triangulation.
 - The dataset described in the paper.
